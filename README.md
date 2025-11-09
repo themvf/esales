@@ -4,11 +4,13 @@ A Python tool to track multiple Etsy stores' daily sales and product information
 
 ## Features
 
+- 🖥️ **Web Dashboard**: Easy-to-use Streamlit interface for managing stores and viewing data
 - 🏪 **Track Multiple Stores**: Monitor up to 10 Etsy stores simultaneously
 - 📊 **Daily Sales Tracking**: Record total shop sales each day
 - 📦 **Product-Level Tracking**: Track individual products and their sales
 - 💾 **Historical Data**: Store data with timestamps for trend analysis
 - 📈 **Daily Reports**: Generate comparison reports to see changes
+- 🤖 **Automated Tracking**: GitHub Actions workflow runs daily at 7 AM EST
 - ⚙️ **Configurable**: Easy JSON configuration for adding/removing stores
 
 ## Installation
@@ -49,7 +51,36 @@ Edit `stores.json` to configure which Etsy stores to track:
 
 ## Usage
 
-### Basic Tracking
+### Web Dashboard (Recommended for Beginners)
+
+The easiest way to use the tracker is through the Streamlit web dashboard:
+
+```bash
+streamlit run app.py
+```
+
+This will open a web interface in your browser with three tabs:
+
+**Tab 1: Manage Stores**
+- Add new Etsy stores by URL
+- Enable/disable tracking for specific stores
+- Delete stores from tracking
+- Manually refresh data
+
+**Tab 2: Sales Overview**
+- View total sales for all stores in a table
+- See when each store was last updated
+- Download sales data as CSV
+- View summary metrics
+
+**Tab 3: Top Products**
+- See the top-selling product for each store
+- View top 5 products per store
+- Compare product performance
+
+The dashboard automatically loads the latest tracked data and provides an intuitive interface for managing your stores.
+
+### Basic Tracking (Command Line)
 
 Run the tracker to collect data from all enabled stores:
 
