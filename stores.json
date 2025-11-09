@@ -1,0 +1,64 @@
+{
+  "stores": [
+    {
+      "name": "Example Store 1",
+      "shop_name": "ThePrintedPeanut",
+      "url": "https://www.etsy.com/shop/ThePrintedPeanut",
+      "enabled": true
+    },
+    {
+      "name": "Example Store 2",
+      "shop_name": "PlannerKate1",
+      "url": "https://www.etsy.com/shop/PlannerKate1",
+      "enabled": true
+    },
+    {
+      "name": "Example Store 3",
+      "shop_name": "ShabbyArtBoutique",
+      "url": "https://www.etsy.com/shop/ShabbyArtBoutique",
+      "enabled": true
+    },
+    {
+      "name": "Example Store 4",
+      "shop_name": "PersonalizedGiftShop",
+      "url": "https://www.etsy.com/shop/PersonalizedGiftShop",
+      "enabled": true
+    },
+    {
+      "name": "Example Store 5",
+      "shop_name": "MiniAndMaximus",
+      "url": "https://www.etsy.com/shop/MiniAndMaximus",
+      "enabled": true
+    },
+    {
+      "name": "Example Store 6",
+      "shop_name": "RusticWeddingChic",
+      "url": "https://www.etsy.com/shop/RusticWeddingChic",
+      "enabled": true
+    },
+    {
+      "name": "Example Store 7",
+      "shop_name": "TheWhiteLime",
+      "url": "https://www.etsy.com/shop/TheWhiteLime",
+      "enabled": true
+    },
+    {
+      "name": "Example Store 8",
+      "shop_name": "PrintableWisdom",
+      "url": "https://www.etsy.com/shop/PrintableWisdom",
+      "enabled": true
+    },
+    {
+      "name": "Example Store 9",
+      "shop_name": "VintageBeachStudio",
+      "url": "https://www.etsy.com/shop/VintageBeachStudio",
+      "enabled": true
+    },
+    {
+      "name": "Example Store 10",
+      "shop_name": "CreativeUnionDesign",
+      "url": "https://www.etsy.com/shop/CreativeUnionDesign",
+      "enabled": true
+    }
+  ]
+}
