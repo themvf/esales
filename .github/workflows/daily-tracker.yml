@@ -1,0 +1,87 @@
+name: Daily Etsy Sales Tracker
+
+on:
+  # Run daily at 7 AM EST (12:00 UTC)
+  # Note: During EDT (daylight saving), this will run at 8 AM EDT
+  # Adjust to 11:00 for 7 AM EDT or 12:00 for 7 AM EST
+  schedule:
+    - cron: '0 12 * * *'  # 7 AM EST (12 PM UTC)
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  track-sales:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for proper git operations
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Create data directory
+        run: |
+          mkdir -p data
+
+      - name: Run Etsy tracker
+        run: |
+          python etsy_tracker.py
+        env:
+          TZ: 'America/New_York'  # Set timezone to EST/EDT
+
+      - name: Check for changes
+        id: git-check
+        run: |
+          git diff --exit-code data/ || echo "changes=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push data
+        if: steps.git-check.outputs.changes == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/
+          git commit -m "chore: update sales data - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload data as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sales-data-${{ github.run_number }}
+          path: data/
+          retention-days: 30
+
+      - name: Create summary
+        if: always()
+        run: |
+          echo "## Etsy Sales Tracking Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date +'%Y-%m-%d %H:%M %Z')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -d "data" ]; then
+            echo "### Files Created/Updated:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            ls -lh data/ | tail -n +2 >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Data Directory Size:" >> $GITHUB_STEP_SUMMARY
+          du -sh data/ >> $GITHUB_STEP_SUMMARY

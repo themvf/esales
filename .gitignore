@@ -1,5 +1,5 @@
-# Data directory - contains scraped data
-data/
+# Data directory - tracked by git for GitHub Actions
+# data/ is now tracked to store historical data
 
 # Logs
 logs/

@@ -125,6 +125,34 @@ Data is saved in two formats:
 
 ## Automated Daily Tracking
 
+### Using GitHub Actions (Recommended)
+
+The repository includes a GitHub Actions workflow that automatically runs the tracker daily at 7 AM EST.
+
+**Features:**
+- Runs automatically every day at 7 AM EST
+- Commits data back to the repository
+- No server setup required
+- Stores artifacts as backup (30-day retention)
+- Can be manually triggered from the Actions tab
+
+**Setup:**
+1. The workflow is already configured in `.github/workflows/daily-tracker.yml`
+2. Push your changes to GitHub
+3. The workflow will run automatically daily
+4. View results in the "Actions" tab on GitHub
+
+**Manual Trigger:**
+1. Go to your repository on GitHub
+2. Click "Actions" tab
+3. Select "Daily Etsy Sales Tracker"
+4. Click "Run workflow"
+
+**View Results:**
+- Check the `data/` directory in your repository for daily snapshots
+- Download artifacts from the Actions run for backups
+- View execution summary in each workflow run
+
 ### Using Cron (Linux/Mac)
 
 Add to your crontab to run daily at 9 AM:
