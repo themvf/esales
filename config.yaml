@@ -1,0 +1,49 @@
+# Etsy Sales Tracker Configuration
+
+# Scraper settings
+scraper:
+  # Delay between requests in seconds (avoid rate limiting)
+  delay: 2.0
+
+  # Maximum concurrent workers for parallel scraping
+  max_workers: 5
+
+  # Maximum retry attempts for failed requests
+  max_retries: 3
+
+# Scheduling settings
+scheduling:
+  # Hour to run daily scrape (24-hour format, 0-23)
+  daily_scrape_hour: 2
+
+  # Minute to run daily scrape (0-59)
+  daily_scrape_minute: 0
+
+  # Enable continuous scraping at intervals
+  enable_continuous: false
+
+  # Interval between scrapes in hours (if continuous enabled)
+  interval_hours: 24
+
+# Shop tracking settings
+shops:
+  # List of shops to track
+  tracked_shops:
+    - "ExampleShop1"
+    - "ExampleShop2"
+    # Add more shops here
+
+  # Automatically discover new popular shops
+  auto_discover: false
+
+  # Minimum sales threshold for auto-discovery
+  min_sales_threshold: 1000
+
+# Database settings
+database:
+  path: "data/etsy_sales.db"
+
+# Logging settings
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/scraper.log"
