@@ -1,0 +1,12 @@
+# Minimal requirements for Streamlit Cloud deployment
+# Use this if requirements.txt fails
+
+beautifulsoup4
+lxml
+requests
+pandas
+streamlit
+plotly
+APScheduler
+PyYAML
+python-dateutil
