@@ -63,7 +63,20 @@ jobs:
       - name: Check for database changes
         id: git-check
         run: |
-          git diff --exit-code data/etsy_sales.db || echo "changed=true" >> $GITHUB_OUTPUT
+          # Check if database exists and has changes (modified or new)
+          if [ -f data/etsy_sales.db ]; then
+            git add data/etsy_sales.db
+            if git diff --cached --quiet data/etsy_sales.db; then
+              echo "No changes to database"
+              echo "changed=false" >> $GITHUB_OUTPUT
+            else
+              echo "Database has changes"
+              echo "changed=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Database file not found"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Commit and push database updates
         if: steps.git-check.outputs.changed == 'true'
