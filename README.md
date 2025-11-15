@@ -94,7 +94,23 @@ This will:
 - Optionally discover new popular shops weekly
 - Store snapshots for trend analysis
 
-#### Option 3: Manual Scraping
+#### Option 3: GitHub Actions (Recommended for Streamlit Cloud)
+
+Trigger re-scraping directly from GitHub's interface:
+
+1. Go to **Actions** tab in your GitHub repository
+2. Select **"Re-scrape Etsy Shops"** workflow
+3. Click **"Run workflow"**
+4. Configure options and start
+
+**Perfect for:**
+- Streamlit Cloud deployments (can't run scripts locally)
+- Fixing shops showing 0 sales
+- Scheduled automatic updates
+
+[📖 Full GitHub Actions Guide](.github/GITHUB_ACTIONS.md)
+
+#### Option 4: Manual Scraping
 
 Use the scraper programmatically:
 

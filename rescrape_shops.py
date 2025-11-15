@@ -5,6 +5,7 @@ This will update the database with correct sales data
 
 import logging
 import time
+import argparse
 from database import Database
 from scraper.etsy_client import EtsyClient
 from scraper.extractors_improved import (
@@ -106,19 +107,37 @@ def rescrape_shop(shop_name: str, db: Database, client: EtsyClient, max_listings
 
 def main():
     """Re-scrape all shops in database"""
-    logger.info("Starting re-scrape of all shops...")
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='Re-scrape Etsy shops with improved extractors')
+    parser.add_argument('--max-listings', type=int, default=50,
+                       help='Maximum listings to scrape per shop (default: 50)')
+    parser.add_argument('--shops', type=str, default='',
+                       help='Comma-separated list of specific shops to scrape (default: all)')
+    args = parser.parse_args()
+
+    max_listings = args.max_listings
+    specific_shops = [s.strip() for s in args.shops.split(',') if s.strip()] if args.shops else None
+
+    logger.info("Starting re-scrape of shops...")
+    logger.info(f"Max listings per shop: {max_listings}")
 
     db = Database()
     client = EtsyClient(delay=2.0)
 
-    # Get all shops
-    shops = db.get_all_shops()
+    # Get all shops or filter by specific shops
+    all_shops = db.get_all_shops()
 
-    if not shops:
+    if not all_shops:
         logger.info("No shops in database to re-scrape")
         return
 
-    logger.info(f"Found {len(shops)} shops to re-scrape\n")
+    # Filter shops if specific ones requested
+    if specific_shops:
+        shops = [s for s in all_shops if s['shop_name'] in specific_shops]
+        logger.info(f"Scraping {len(shops)} specific shops: {', '.join([s['shop_name'] for s in shops])}\n")
+    else:
+        shops = all_shops
+        logger.info(f"Found {len(shops)} shops to re-scrape\n")
 
     success_count = 0
     for i, shop in enumerate(shops, 1):
@@ -128,7 +147,7 @@ def main():
         logger.info("-" * 60)
 
         try:
-            if rescrape_shop(shop_name, db, client, max_listings=50):
+            if rescrape_shop(shop_name, db, client, max_listings=max_listings):
                 success_count += 1
             else:
                 logger.error(f"Failed to re-scrape {shop_name}")
