@@ -16,15 +16,22 @@ class Database:
     def __init__(self, db_path: str = "data/etsy_sales.db"):
         """Initialize database connection"""
         self.db_path = db_path
-        # Create data directory if it doesn't exist
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        # Create data directory if it doesn't exist and is writable
+        try:
+            dir_path = os.path.dirname(db_path)
+            if dir_path:  # Only create if there's a directory component
+                os.makedirs(dir_path, exist_ok=True)
+        except (OSError, PermissionError):
+            # If we can't create the directory, use current directory
+            self.db_path = os.path.basename(db_path)
         self.conn = None
         self.init_database()
 
     def get_connection(self) -> sqlite3.Connection:
         """Get database connection"""
         if self.conn is None:
-            self.conn = sqlite3.connect(self.db_path)
+            # Use check_same_thread=False for Streamlit compatibility
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
             self.conn.row_factory = sqlite3.Row  # Return rows as dictionaries
         return self.conn
 

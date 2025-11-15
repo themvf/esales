@@ -29,11 +29,12 @@ st.set_page_config(
 )
 
 # Initialize database
-@st.cache_resource
+# Note: Don't cache Database with SQLite - connections are not thread-safe
 def get_database():
-    """Get database instance"""
+    """Get database instance - creates a new connection each time"""
     return Database()
 
+# Get a fresh database connection for this run
 db = get_database()
 
 # Sidebar navigation
