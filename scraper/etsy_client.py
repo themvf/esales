@@ -142,28 +142,48 @@ class EtsyClient:
                 only_main_content=False  # Get full page
             )
 
-            # Result structure: result has 'html', 'markdown', etc.
-            if result and 'html' in result:
-                # Create a response-like object
-                class FirecrawlResponse:
-                    def __init__(self, html_content, url):
-                        self.text = html_content
-                        self.content = html_content.encode('utf-8')
-                        self.status_code = 200
-                        self.url = url
+            # Debug: log what we got back
+            logger.info(f"Firecrawl result keys: {result.keys() if result else 'None'}")
+            if result and not isinstance(result, dict):
+                logger.info(f"Firecrawl result type: {type(result)}")
+                logger.info(f"Firecrawl result dir: {dir(result)}")
 
-                    def raise_for_status(self):
-                        pass
+            # Result structure: check for 'data' wrapper or direct 'html'
+            if result:
+                # Some versions wrap response in 'data' key
+                if 'data' in result and isinstance(result['data'], dict):
+                    data = result['data']
+                    logger.info(f"Found 'data' key with keys: {data.keys()}")
+                else:
+                    data = result
 
-                response = FirecrawlResponse(result['html'], url)
-                logger.info(f"✅ Successfully fetched with Firecrawl: {url}")
-                return response
+                # Check for html in various possible keys
+                html_content = data.get('html') or data.get('content') or data.get('rawHtml')
+
+                if html_content:
+                    # Create a response-like object
+                    class FirecrawlResponse:
+                        def __init__(self, html_content, url):
+                            self.text = html_content
+                            self.content = html_content.encode('utf-8')
+                            self.status_code = 200
+                            self.url = url
+
+                        def raise_for_status(self):
+                            pass
+
+                    response = FirecrawlResponse(html_content, url)
+                    logger.info(f"✅ Successfully fetched with Firecrawl: {url}")
+                    return response
+                else:
+                    logger.error(f"Firecrawl returned no HTML for {url}. Available keys: {data.keys()}")
+                    return None
             else:
-                logger.error(f"Firecrawl returned no HTML for {url}")
+                logger.error(f"Firecrawl returned None/empty result for {url}")
                 return None
 
         except Exception as e:
-            logger.error(f"Firecrawl error for {url}: {e}")
+            logger.error(f"Firecrawl error for {url}: {e}", exc_info=True)
             # Try fallback to cloudscraper if Firecrawl fails
             logger.info("Attempting cloudscraper fallback...")
             if not hasattr(self, 'session'):
