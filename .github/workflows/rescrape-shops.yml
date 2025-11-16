@@ -49,9 +49,15 @@ jobs:
         env:
           MAX_LISTINGS: ${{ github.event.inputs.max_listings || '50' }}
           SPECIFIC_SHOPS: ${{ github.event.inputs.shops || '' }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
         run: |
           echo "Starting re-scrape process..."
           echo "Max listings per shop: $MAX_LISTINGS"
+          if [ -n "$FIRECRAWL_API_KEY" ]; then
+            echo "✅ Firecrawl API key detected - using Firecrawl for scraping"
+          else
+            echo "⚠️  No Firecrawl API key - using cloudscraper fallback"
+          fi
           if [ -n "$SPECIFIC_SHOPS" ]; then
             echo "Scraping specific shops: $SPECIFIC_SHOPS"
             python rescrape_shops.py --max-listings $MAX_LISTINGS --shops "$SPECIFIC_SHOPS"
