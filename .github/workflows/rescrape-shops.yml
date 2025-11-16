@@ -33,7 +33,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
+          echo "📦 Installing dependencies from requirements.txt..."
+          cat requirements.txt | grep -E "firecrawl|cloudscraper" || echo "⚠️  firecrawl/cloudscraper not in requirements.txt"
           pip install -r requirements.txt
+          echo ""
+          echo "✅ Installed packages:"
+          pip list | grep -E "firecrawl|cloudscraper" || echo "⚠️  firecrawl/cloudscraper not installed"
 
       - name: Create data directory
         run: |
