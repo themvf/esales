@@ -9,7 +9,7 @@ import logging
 from typing import Optional
 
 try:
-    from firecrawl.firecrawl import FirecrawlApp
+    from firecrawl import Firecrawl
     FIRECRAWL_AVAILABLE = True
 except ImportError:
     FIRECRAWL_AVAILABLE = False
@@ -48,7 +48,7 @@ class EtsyClient:
         # Initialize Firecrawl if available and configured
         if FIRECRAWL_AVAILABLE and self.firecrawl_api_key:
             try:
-                self.firecrawl = FirecrawlApp(api_key=self.firecrawl_api_key)
+                self.firecrawl = Firecrawl(api_key=self.firecrawl_api_key)
                 self.use_firecrawl = True
                 logger.info("✅ Firecrawl initialized - using API for scraping")
             except Exception as e:
@@ -135,12 +135,14 @@ class EtsyClient:
         try:
             logger.debug(f"Fetching with Firecrawl: {url}")
 
-            # Use Firecrawl's scrape method (not scrape_url)
-            result = self.firecrawl.scrape(url=url, params={
-                'formats': ['html'],
-                'onlyMainContent': False  # Get full page
-            })
+            # Use Firecrawl's scrape method with correct signature
+            result = self.firecrawl.scrape(
+                url,
+                formats=["html", "markdown"],
+                only_main_content=False  # Get full page
+            )
 
+            # Result structure: result has 'html', 'markdown', etc.
             if result and 'html' in result:
                 # Create a response-like object
                 class FirecrawlResponse:
