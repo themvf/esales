@@ -1,33 +1,23 @@
 """
 Etsy HTTP Client
-Handles HTTP requests with rate limiting, retry logic, and user-agent rotation
+Handles HTTP requests with Cloudflare bypass, rate limiting, and anti-detection
 """
 
-import requests
+import cloudscraper
 import time
 import random
 import logging
 from typing import Optional
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
 
 class EtsyClient:
-    """HTTP client for Etsy with rate limiting and error handling"""
-
-    USER_AGENTS = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ]
+    """HTTP client for Etsy with Cloudflare bypass and rate limiting"""
 
     def __init__(self, delay: float = 2.0, max_retries: int = 3, timeout: int = 30):
         """
-        Initialize Etsy client
+        Initialize Etsy client with cloudscraper for Cloudflare bypass
 
         Args:
             delay: Delay between requests in seconds
@@ -40,27 +30,43 @@ class EtsyClient:
         self.last_request_time = 0
         self.session = self._create_session()
 
-    def _create_session(self) -> requests.Session:
-        """Create a requests session with retry logic"""
-        session = requests.Session()
-
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=self.max_retries,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET", "POST"]
+    def _create_session(self):
+        """Create a cloudscraper session with enhanced anti-detection"""
+        # Create scraper with enhanced browser fingerprinting
+        scraper = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'mobile': False,
+                'desktop': True
+            },
+            delay=15,  # Increased delay for challenge solving
+            debug=False,
+            # Use interpreter='nodejs' if available for better JS challenge solving
+            interpreter='native'
         )
 
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
+        # Add realistic browser headers
+        scraper.headers.update({
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Cache-Control': 'max-age=0',
+            # Referer helps - makes it look like organic traffic
+            'Referer': 'https://www.google.com/'
+        })
 
-        return session
-
-    def _get_random_user_agent(self) -> str:
-        """Get a random user agent string"""
-        return random.choice(self.USER_AGENTS)
+        return scraper
 
     def _rate_limit(self):
         """Enforce rate limiting between requests"""
@@ -71,49 +77,52 @@ class EtsyClient:
             time.sleep(sleep_time)
         self.last_request_time = time.time()
 
-    def get(self, url: str, **kwargs) -> Optional[requests.Response]:
+    def get(self, url: str, **kwargs) -> Optional:
         """
-        Make a GET request with rate limiting and error handling
+        Make a GET request with Cloudflare bypass and rate limiting
 
         Args:
             url: URL to fetch
-            **kwargs: Additional arguments to pass to requests.get()
+            **kwargs: Additional arguments to pass to session.get()
 
         Returns:
             Response object or None if request failed
         """
         self._rate_limit()
 
-        # Set random user agent if not provided
-        headers = kwargs.pop('headers', {})
-        if 'User-Agent' not in headers:
-            headers['User-Agent'] = self._get_random_user_agent()
-
         # Set timeout if not provided
         if 'timeout' not in kwargs:
             kwargs['timeout'] = self.timeout
 
-        try:
-            logger.debug(f"Fetching: {url}")
-            response = self.session.get(url, headers=headers, **kwargs)
-            response.raise_for_status()
-            return response
+        # Retry logic
+        for attempt in range(self.max_retries):
+            try:
+                logger.debug(f"Fetching: {url} (attempt {attempt + 1}/{self.max_retries})")
+                response = self.session.get(url, **kwargs)
 
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"HTTP error fetching {url}: {e}")
-            return None
+                # Check if we got blocked
+                if response.status_code == 403:
+                    logger.warning(f"Got 403 on attempt {attempt + 1}, retrying...")
+                    if attempt < self.max_retries - 1:
+                        time.sleep((attempt + 1) * 5)  # Exponential backoff
+                        continue
+                    else:
+                        logger.error(f"Failed after {self.max_retries} attempts with 403")
+                        return None
 
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"Connection error fetching {url}: {e}")
-            return None
+                response.raise_for_status()
+                logger.debug(f"Successfully fetched {url} ({len(response.content)} bytes)")
+                return response
 
-        except requests.exceptions.Timeout as e:
-            logger.error(f"Timeout fetching {url}: {e}")
-            return None
+            except Exception as e:
+                logger.error(f"Error fetching {url} (attempt {attempt + 1}): {e}")
+                if attempt < self.max_retries - 1:
+                    time.sleep((attempt + 1) * 2)  # Backoff
+                else:
+                    logger.error(f"Failed after {self.max_retries} attempts")
+                    return None
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching {url}: {e}")
-            return None
+        return None
 
     def close(self):
         """Close the session"""
