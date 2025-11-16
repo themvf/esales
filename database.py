@@ -84,10 +84,27 @@ class Database:
             )
         """)
 
+        # Create shop_snapshots table for shop-level historical tracking
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS shop_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shop_name TEXT,
+                total_sales INTEGER DEFAULT 0,
+                num_listings INTEGER DEFAULT 0,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (shop_name) REFERENCES shops(shop_name)
+            )
+        """)
+
         # Create indexes for faster queries
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_snapshots_listing_timestamp
             ON sales_snapshots(listing_id, timestamp)
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_shop_snapshots_timestamp
+            ON shop_snapshots(shop_name, timestamp)
         """)
 
         cursor.execute("""
@@ -298,6 +315,93 @@ class Database:
 
         row = cursor.fetchone()
         return dict(row) if row else None
+
+    # ============ SHOP SNAPSHOT OPERATIONS ============
+
+    def add_shop_snapshot(self, shop_name: str, total_sales: int = 0, num_listings: int = 0):
+        """Add a snapshot for shop-level tracking"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO shop_snapshots (shop_name, total_sales, num_listings)
+            VALUES (?, ?, ?)
+        """, (shop_name, total_sales, num_listings))
+
+        conn.commit()
+
+    def get_shop_snapshots(self, shop_name: str, limit: int = None) -> List[Dict]:
+        """Get all snapshots for a shop, optionally limited"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        query = """
+            SELECT * FROM shop_snapshots
+            WHERE shop_name = ?
+            ORDER BY timestamp DESC
+        """
+
+        if limit:
+            query += f" LIMIT {limit}"
+
+        cursor.execute(query, (shop_name,))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_shop_daily_sales(self, shop_name: str) -> Optional[int]:
+        """Calculate sales in the last 24 hours for a shop"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        # Get latest snapshot
+        cursor.execute("""
+            SELECT total_sales FROM shop_snapshots
+            WHERE shop_name = ?
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """, (shop_name,))
+
+        current = cursor.fetchone()
+        if not current:
+            return None
+
+        # Get snapshot from ~24 hours ago
+        cursor.execute("""
+            SELECT total_sales FROM shop_snapshots
+            WHERE shop_name = ?
+            AND timestamp <= datetime('now', '-1 day')
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """, (shop_name,))
+
+        yesterday = cursor.fetchone()
+
+        if yesterday:
+            return current['total_sales'] - yesterday['total_sales']
+        else:
+            # If no data from 24 hours ago, return current count
+            return current['total_sales']
+
+    def get_all_shop_snapshots_latest(self) -> List[Dict]:
+        """Get the latest snapshot for all shops"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT s.*, ss.total_sales as snapshot_sales, ss.timestamp as snapshot_time
+            FROM shops s
+            LEFT JOIN (
+                SELECT shop_name, total_sales, timestamp
+                FROM shop_snapshots ss1
+                WHERE timestamp = (
+                    SELECT MAX(timestamp)
+                    FROM shop_snapshots ss2
+                    WHERE ss2.shop_name = ss1.shop_name
+                )
+            ) ss ON s.shop_name = ss.shop_name
+            ORDER BY s.total_sales DESC
+        """)
+
+        return [dict(row) for row in cursor.fetchall()]
 
     # ============ ANALYTICS QUERIES ============
 
