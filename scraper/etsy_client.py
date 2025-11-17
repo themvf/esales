@@ -143,40 +143,76 @@ class EtsyClient:
             )
 
             # Debug: log what we got back
-            logger.info(f"Firecrawl result keys: {result.keys() if result else 'None'}")
-            if result and not isinstance(result, dict):
-                logger.info(f"Firecrawl result type: {type(result)}")
-                logger.info(f"Firecrawl result dir: {dir(result)}")
+            logger.info(f"Firecrawl result type: {type(result).__name__ if result else 'None'}")
 
-            # Result structure: check for 'data' wrapper or direct 'html'
+            # Handle both Document objects and dictionaries
             if result:
-                # Some versions wrap response in 'data' key
-                if 'data' in result and isinstance(result['data'], dict):
-                    data = result['data']
-                    logger.info(f"Found 'data' key with keys: {data.keys()}")
+                # Convert Document object to dict if needed
+                if hasattr(result, '__dict__') and not isinstance(result, dict):
+                    logger.info(f"Converting Document object to dict")
+                    # Try to access common attributes
+                    html_content = None
+                    for attr in ['html', 'content', 'rawHtml', 'raw_html']:
+                        if hasattr(result, attr):
+                            content = getattr(result, attr)
+                            if content:
+                                html_content = content
+                                logger.info(f"Found HTML content in attribute: {attr}")
+                                break
+
+                    # If we found HTML content, create response
+                    if html_content:
+                        class FirecrawlResponse:
+                            def __init__(self, html_content, url):
+                                self.text = html_content
+                                self.content = html_content.encode('utf-8')
+                                self.status_code = 200
+                                self.url = url
+
+                            def raise_for_status(self):
+                                pass
+
+                        response = FirecrawlResponse(html_content, url)
+                        logger.info(f"✅ Successfully fetched with Firecrawl: {url}")
+                        return response
+                    else:
+                        logger.error(f"Firecrawl Document has no HTML content. Attributes: {dir(result)}")
+                        return None
+
+                # Handle dictionary responses
+                elif isinstance(result, dict):
+                    logger.info(f"Firecrawl result keys: {list(result.keys())}")
+
+                    # Some versions wrap response in 'data' key
+                    if 'data' in result and isinstance(result['data'], dict):
+                        data = result['data']
+                        logger.info(f"Found 'data' key with keys: {list(data.keys())}")
+                    else:
+                        data = result
+
+                    # Check for html in various possible keys
+                    html_content = data.get('html') or data.get('content') or data.get('rawHtml')
+
+                    if html_content:
+                        # Create a response-like object
+                        class FirecrawlResponse:
+                            def __init__(self, html_content, url):
+                                self.text = html_content
+                                self.content = html_content.encode('utf-8')
+                                self.status_code = 200
+                                self.url = url
+
+                            def raise_for_status(self):
+                                pass
+
+                        response = FirecrawlResponse(html_content, url)
+                        logger.info(f"✅ Successfully fetched with Firecrawl: {url}")
+                        return response
+                    else:
+                        logger.error(f"Firecrawl returned no HTML for {url}. Available keys: {list(data.keys())}")
+                        return None
                 else:
-                    data = result
-
-                # Check for html in various possible keys
-                html_content = data.get('html') or data.get('content') or data.get('rawHtml')
-
-                if html_content:
-                    # Create a response-like object
-                    class FirecrawlResponse:
-                        def __init__(self, html_content, url):
-                            self.text = html_content
-                            self.content = html_content.encode('utf-8')
-                            self.status_code = 200
-                            self.url = url
-
-                        def raise_for_status(self):
-                            pass
-
-                    response = FirecrawlResponse(html_content, url)
-                    logger.info(f"✅ Successfully fetched with Firecrawl: {url}")
-                    return response
-                else:
-                    logger.error(f"Firecrawl returned no HTML for {url}. Available keys: {data.keys()}")
+                    logger.error(f"Unexpected result type: {type(result)}")
                     return None
             else:
                 logger.error(f"Firecrawl returned None/empty result for {url}")
