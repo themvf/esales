@@ -4,11 +4,6 @@ on:
   # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
     inputs:
-      max_listings:
-        description: 'Max listings to scrape per shop'
-        required: false
-        default: '50'
-        type: string
       shops:
         description: 'Specific shops to scrape (comma-separated, leave empty for all)'
         required: false
@@ -38,7 +33,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
+          echo "📦 Installing dependencies from requirements.txt..."
+          cat requirements.txt | grep -E "firecrawl|cloudscraper" || echo "⚠️  firecrawl/cloudscraper not in requirements.txt"
           pip install -r requirements.txt
+          echo ""
+          echo "✅ Installed packages:"
+          pip list | grep -E "firecrawl|cloudscraper" || echo "⚠️  firecrawl/cloudscraper not installed"
 
       - name: Create data directory
         run: |
@@ -47,17 +47,22 @@ jobs:
 
       - name: Run re-scrape script
         env:
-          MAX_LISTINGS: ${{ github.event.inputs.max_listings || '50' }}
           SPECIFIC_SHOPS: ${{ github.event.inputs.shops || '' }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
         run: |
-          echo "Starting re-scrape process..."
-          echo "Max listings per shop: $MAX_LISTINGS"
+          echo "Starting shop-level scraping..."
+          echo "Mode: Shop total sales tracking (no individual listings)"
+          if [ -n "$FIRECRAWL_API_KEY" ]; then
+            echo "✅ Firecrawl API key detected - using Firecrawl for scraping"
+          else
+            echo "⚠️  No Firecrawl API key - using cloudscraper fallback"
+          fi
           if [ -n "$SPECIFIC_SHOPS" ]; then
             echo "Scraping specific shops: $SPECIFIC_SHOPS"
-            python rescrape_shops.py --max-listings $MAX_LISTINGS --shops "$SPECIFIC_SHOPS"
+            python rescrape_shops.py --shops "$SPECIFIC_SHOPS"
           else
             echo "Scraping all shops in database"
-            python rescrape_shops.py --max-listings $MAX_LISTINGS
+            python rescrape_shops.py
           fi
 
       - name: Check for database changes
@@ -86,8 +91,8 @@ jobs:
           git add data/etsy_sales.db
           git commit -m "Update Etsy sales data [automated]
 
-          - Re-scraped shops using GitHub Actions
-          - Updated sales counts and listings
+          - Shop-level scraping (total sales tracking)
+          - Created snapshots for daily sales calculation
           - Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           git push
 
@@ -102,16 +107,17 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## Re-scrape Complete! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "## Shop-Level Scraping Complete! 🎉" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Details" >> $GITHUB_STEP_SUMMARY
           echo "- **Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "- **Max listings**: ${{ github.event.inputs.max_listings || '50' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Mode**: Shop-level tracking (total sales only)" >> $GITHUB_STEP_SUMMARY
           if [ -n "${{ github.event.inputs.shops }}" ]; then
             echo "- **Shops**: ${{ github.event.inputs.shops }}" >> $GITHUB_STEP_SUMMARY
           else
             echo "- **Shops**: All shops in database" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Database has been updated and pushed to the repository." >> $GITHUB_STEP_SUMMARY
-          echo "Streamlit Cloud will automatically redeploy with the new data." >> $GITHUB_STEP_SUMMARY
+          echo "✅ Snapshots created for daily sales tracking" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Database updated and pushed to repository" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Streamlit Cloud will automatically redeploy" >> $GITHUB_STEP_SUMMARY

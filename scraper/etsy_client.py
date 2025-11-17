@@ -1,66 +1,107 @@
 """
 Etsy HTTP Client
-Handles HTTP requests with rate limiting, retry logic, and user-agent rotation
+Handles HTTP requests using Firecrawl API or cloudscraper fallback
 """
 
-import requests
+import os
 import time
-import random
 import logging
 from typing import Optional
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+
+try:
+    from firecrawl import Firecrawl
+    FIRECRAWL_AVAILABLE = True
+except ImportError:
+    FIRECRAWL_AVAILABLE = False
+
+try:
+    import cloudscraper
+    CLOUDSCRAPER_AVAILABLE = True
+except ImportError:
+    CLOUDSCRAPER_AVAILABLE = False
+    import requests
 
 logger = logging.getLogger(__name__)
 
 
 class EtsyClient:
-    """HTTP client for Etsy with rate limiting and error handling"""
+    """HTTP client for Etsy with Firecrawl API (bypasses all anti-bot protection)"""
 
-    USER_AGENTS = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ]
-
-    def __init__(self, delay: float = 2.0, max_retries: int = 3, timeout: int = 30):
+    def __init__(self, delay: float = 2.0, max_retries: int = 3, timeout: int = 30, firecrawl_api_key: str = None):
         """
-        Initialize Etsy client
+        Initialize Etsy client with Firecrawl API or cloudscraper fallback
 
         Args:
             delay: Delay between requests in seconds
             max_retries: Maximum number of retry attempts
             timeout: Request timeout in seconds
+            firecrawl_api_key: Firecrawl API key (or set FIRECRAWL_API_KEY env var)
         """
         self.delay = delay
         self.max_retries = max_retries
         self.timeout = timeout
         self.last_request_time = 0
-        self.session = self._create_session()
 
-    def _create_session(self) -> requests.Session:
-        """Create a requests session with retry logic"""
-        session = requests.Session()
+        # Try to get Firecrawl API key
+        self.firecrawl_api_key = firecrawl_api_key or os.getenv('FIRECRAWL_API_KEY')
 
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=self.max_retries,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET", "POST"]
-        )
+        # Initialize Firecrawl if available and configured
+        if FIRECRAWL_AVAILABLE and self.firecrawl_api_key:
+            try:
+                self.firecrawl = Firecrawl(api_key=self.firecrawl_api_key)
+                self.use_firecrawl = True
+                logger.info("✅ Firecrawl initialized - using API for scraping")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Firecrawl: {e}. Falling back to cloudscraper")
+                self.use_firecrawl = False
+                self.session = self._create_session()
+        else:
+            if not FIRECRAWL_AVAILABLE:
+                logger.warning("Firecrawl not installed. Install with: pip install firecrawl-py")
+            elif not self.firecrawl_api_key:
+                logger.warning("No Firecrawl API key found. Set FIRECRAWL_API_KEY environment variable")
+            logger.info("Using cloudscraper fallback")
+            self.use_firecrawl = False
+            self.session = self._create_session()
 
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
+    def _create_session(self):
+        """Create a cloudscraper session with enhanced anti-detection"""
+        if CLOUDSCRAPER_AVAILABLE:
+            # Create scraper with enhanced browser fingerprinting
+            scraper = cloudscraper.create_scraper(
+                browser={
+                    'browser': 'chrome',
+                    'platform': 'windows',
+                    'mobile': False,
+                    'desktop': True
+                },
+                delay=15,
+                debug=False,
+                interpreter='native'
+            )
 
-        return session
-
-    def _get_random_user_agent(self) -> str:
-        """Get a random user agent string"""
-        return random.choice(self.USER_AGENTS)
+            # Add realistic browser headers
+            scraper.headers.update({
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
+                'Cache-Control': 'max-age=0',
+                'Referer': 'https://www.google.com/'
+            })
+            return scraper
+        else:
+            # Fallback to plain requests
+            return requests.Session()
 
     def _rate_limit(self):
         """Enforce rate limiting between requests"""
@@ -71,53 +112,143 @@ class EtsyClient:
             time.sleep(sleep_time)
         self.last_request_time = time.time()
 
-    def get(self, url: str, **kwargs) -> Optional[requests.Response]:
+    def get(self, url: str, **kwargs) -> Optional:
         """
-        Make a GET request with rate limiting and error handling
+        Make a GET request using Firecrawl or cloudscraper fallback
 
         Args:
             url: URL to fetch
-            **kwargs: Additional arguments to pass to requests.get()
+            **kwargs: Additional arguments
 
         Returns:
-            Response object or None if request failed
+            Response-like object with .text and .status_code attributes, or None if failed
         """
         self._rate_limit()
 
-        # Set random user agent if not provided
-        headers = kwargs.pop('headers', {})
-        if 'User-Agent' not in headers:
-            headers['User-Agent'] = self._get_random_user_agent()
+        if self.use_firecrawl:
+            return self._get_with_firecrawl(url)
+        else:
+            return self._get_with_cloudscraper(url, **kwargs)
 
-        # Set timeout if not provided
-        if 'timeout' not in kwargs:
-            kwargs['timeout'] = self.timeout
-
+    def _get_with_firecrawl(self, url: str):
+        """Fetch URL using Firecrawl API"""
         try:
-            logger.debug(f"Fetching: {url}")
-            response = self.session.get(url, headers=headers, **kwargs)
+            logger.debug(f"Fetching with Firecrawl: {url}")
+
+            # Use Firecrawl's scrape method with correct signature
+            result = self.firecrawl.scrape(
+                url,
+                formats=["html", "markdown"],
+                only_main_content=False  # Get full page
+            )
+
+            # Debug: log what we got back
+            logger.info(f"Firecrawl result type: {type(result).__name__ if result else 'None'}")
+
+            # Handle both Document objects and dictionaries
+            if result:
+                # Convert Document object to dict if needed
+                if hasattr(result, '__dict__') and not isinstance(result, dict):
+                    logger.info(f"Converting Document object to dict")
+                    # Try to access common attributes
+                    html_content = None
+                    for attr in ['html', 'content', 'rawHtml', 'raw_html']:
+                        if hasattr(result, attr):
+                            content = getattr(result, attr)
+                            if content:
+                                html_content = content
+                                logger.info(f"Found HTML content in attribute: {attr}")
+                                break
+
+                    # If we found HTML content, create response
+                    if html_content:
+                        class FirecrawlResponse:
+                            def __init__(self, html_content, url):
+                                self.text = html_content
+                                self.content = html_content.encode('utf-8')
+                                self.status_code = 200
+                                self.url = url
+
+                            def raise_for_status(self):
+                                pass
+
+                        response = FirecrawlResponse(html_content, url)
+                        logger.info(f"✅ Successfully fetched with Firecrawl: {url}")
+                        return response
+                    else:
+                        logger.error(f"Firecrawl Document has no HTML content. Attributes: {dir(result)}")
+                        return None
+
+                # Handle dictionary responses
+                elif isinstance(result, dict):
+                    logger.info(f"Firecrawl result keys: {list(result.keys())}")
+
+                    # Some versions wrap response in 'data' key
+                    if 'data' in result and isinstance(result['data'], dict):
+                        data = result['data']
+                        logger.info(f"Found 'data' key with keys: {list(data.keys())}")
+                    else:
+                        data = result
+
+                    # Check for html in various possible keys
+                    html_content = data.get('html') or data.get('content') or data.get('rawHtml')
+
+                    if html_content:
+                        # Create a response-like object
+                        class FirecrawlResponse:
+                            def __init__(self, html_content, url):
+                                self.text = html_content
+                                self.content = html_content.encode('utf-8')
+                                self.status_code = 200
+                                self.url = url
+
+                            def raise_for_status(self):
+                                pass
+
+                        response = FirecrawlResponse(html_content, url)
+                        logger.info(f"✅ Successfully fetched with Firecrawl: {url}")
+                        return response
+                    else:
+                        logger.error(f"Firecrawl returned no HTML for {url}. Available keys: {list(data.keys())}")
+                        return None
+                else:
+                    logger.error(f"Unexpected result type: {type(result)}")
+                    return None
+            else:
+                logger.error(f"Firecrawl returned None/empty result for {url}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Firecrawl error for {url}: {e}", exc_info=True)
+            # Try fallback to cloudscraper if Firecrawl fails
+            logger.info("Attempting cloudscraper fallback...")
+            if not hasattr(self, 'session'):
+                self.session = self._create_session()
+            return self._get_with_cloudscraper(url)
+
+    def _get_with_cloudscraper(self, url: str, **kwargs):
+        """Fetch URL using cloudscraper"""
+        try:
+            logger.debug(f"Fetching with cloudscraper: {url}")
+
+            if 'timeout' not in kwargs:
+                kwargs['timeout'] = self.timeout
+
+            response = self.session.get(url, **kwargs)
             response.raise_for_status()
+            logger.info(f"✅ Successfully fetched with cloudscraper: {url}")
             return response
 
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"HTTP error fetching {url}: {e}")
-            return None
-
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"Connection error fetching {url}: {e}")
-            return None
-
-        except requests.exceptions.Timeout as e:
-            logger.error(f"Timeout fetching {url}: {e}")
-            return None
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching {url}: {e}")
+        except Exception as e:
+            logger.error(f"Cloudscraper error for {url}: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Status code: {e.response.status_code}")
             return None
 
     def close(self):
         """Close the session"""
-        self.session.close()
+        if hasattr(self, 'session'):
+            self.session.close()
 
     def __enter__(self):
         """Context manager entry"""
