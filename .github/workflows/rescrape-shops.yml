@@ -10,9 +10,9 @@ on:
         default: ''
         type: string
 
-  # Optional: Run on schedule (e.g., weekly on Sundays at 2 AM UTC)
-  # schedule:
-  #   - cron: '0 2 * * 0'
+  # Run daily at 7 AM EST (12 PM UTC)
+  schedule:
+    - cron: '0 12 * * *'
 
 jobs:
   rescrape:
