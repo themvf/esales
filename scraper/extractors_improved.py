@@ -176,10 +176,12 @@ def extract_shop_info_improved(html: str, shop_name: str = None) -> Dict:
             except (ValueError, IndexError):
                 continue
 
-    # Look for items/listings count
+    # Look for items/listings count - specifically look for "ALL" section
     items_patterns = [
-        r'(\d+(?:,\d+)*)\s+items?',
-        r'(\d+(?:,\d+)*)\s+listings?',
+        r'ALL\s*\(?\s*(\d+(?:,\d+)*)\s*\)?',  # "ALL (123)" or "ALL 123"
+        r'ALL\s+(\d+(?:,\d+)*)',  # "ALL 123"
+        r'(\d+(?:,\d+)*)\s+items?',  # Fallback: "123 items"
+        r'(\d+(?:,\d+)*)\s+listings?',  # Fallback: "123 listings"
     ]
 
     for pattern in items_patterns:
@@ -187,6 +189,7 @@ def extract_shop_info_improved(html: str, shop_name: str = None) -> Dict:
         if match:
             try:
                 shop_info['num_listings'] = int(match.group(1).replace(',', ''))
+                logger.debug(f"Found num_listings using pattern: {pattern}")
                 break
             except (ValueError, IndexError):
                 continue

@@ -74,12 +74,21 @@ def extract_shop_info(html: str, shop_name: str = None) -> Dict:
     if location_span:
         shop_info['location'] = location_span.get_text(strip=True)
 
-    # Extract number of listings (from shop page)
-    listings_text = soup.find(text=re.compile(r'\d+\s+items?', re.IGNORECASE))
-    if listings_text:
-        match = re.search(r'(\d+(?:,\d+)*)', listings_text)
+    # Extract number of listings (from shop page) - look for "ALL" section
+    # First try to find "ALL" with a number next to it
+    page_text = soup.get_text()
+    items_patterns = [
+        r'ALL\s*\(?\s*(\d+(?:,\d+)*)\s*\)?',  # "ALL (123)" or "ALL 123"
+        r'ALL\s+(\d+(?:,\d+)*)',  # "ALL 123"
+        r'(\d+(?:,\d+)*)\s+items?',  # Fallback: "123 items"
+    ]
+
+    for pattern in items_patterns:
+        match = re.search(pattern, page_text, re.IGNORECASE)
         if match:
             shop_info['num_listings'] = int(match.group(1).replace(',', ''))
+            logger.debug(f"Found num_listings using pattern: {pattern}")
+            break
 
     logger.debug(f"Extracted shop info: {shop_info}")
     return shop_info
