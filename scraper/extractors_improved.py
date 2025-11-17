@@ -176,32 +176,47 @@ def extract_shop_info_improved(html: str, shop_name: str = None) -> Dict:
             except (ValueError, IndexError):
                 continue
 
-    # Look for items/listings count with more flexible patterns
+    # Look for items/listings count - collect all matches and choose the best one
+    # More specific patterns are prioritized (to avoid false positives like "5 favorite items")
     items_patterns = [
-        # Direct patterns
-        r'(\d+(?:,\d+)*)\s+items?',
-        r'(\d+(?:,\d+)*)\s+listings?',
-        # Reversed patterns (label first)
-        r'items?:\s*(\d+(?:,\d+)*)',
-        r'listings?:\s*(\d+(?:,\d+)*)',
-        # With possible whitespace/newlines
-        r'(\d+(?:,\d+)*)\s*\n?\s*items?',
-        r'(\d+(?:,\d+)*)\s*\n?\s*listings?',
-        # In parentheses or with other separators
-        r'\((\d+(?:,\d+)*)\s+items?\)',
-        r'\((\d+(?:,\d+)*)\s+listings?\)',
+        # High priority: specific context patterns
+        (r'(\d+(?:,\d+)*)\s+(?:shop\s+)?items?\s+(?:for sale|in shop|available)', 10),
+        (r'(\d+(?:,\d+)*)\s+active\s+(?:items?|listings?)', 10),
+        (r'(\d+(?:,\d+)*)\s+(?:total\s+)?(?:items?|listings?)\s+(?:for sale|available)', 10),
+        # Medium priority: direct patterns
+        (r'(\d+(?:,\d+)*)\s+items?(?!\s+(?:sold|favorited|in\s+cart|to\s+review))', 5),
+        (r'(\d+(?:,\d+)*)\s+listings?(?!\s+(?:sold|favorited))', 5),
+        # Reversed patterns
+        (r'items?:\s*(\d+(?:,\d+)*)', 5),
+        (r'listings?:\s*(\d+(?:,\d+)*)', 5),
+        # Lower priority: generic patterns
+        (r'\((\d+(?:,\d+)*)\s+items?\)', 3),
+        (r'\((\d+(?:,\d+)*)\s+listings?\)', 3),
+        (r'(\d+(?:,\d+)*)\s*\n?\s*items?', 1),
+        (r'(\d+(?:,\d+)*)\s*\n?\s*listings?', 1),
     ]
 
-    for pattern in items_patterns:
-        match = re.search(pattern, page_text, re.IGNORECASE)
-        if match:
+    # Collect all matches with their priorities
+    potential_matches = []
+    for pattern, priority in items_patterns:
+        for match in re.finditer(pattern, page_text, re.IGNORECASE):
             try:
                 num = int(match.group(1).replace(',', ''))
-                shop_info['num_listings'] = num
-                logger.info(f"Found {num} listings using pattern: {pattern}")
-                break
+                # Higher numbers are more likely to be the actual listing count
+                # (vs "5 favorite items" which would be lower)
+                score = priority + (num / 10)  # Slight bias toward larger numbers
+                potential_matches.append((num, score, pattern))
             except (ValueError, IndexError):
                 continue
+
+    # Choose the match with the highest score
+    if potential_matches:
+        potential_matches.sort(key=lambda x: x[1], reverse=True)
+        num, score, pattern = potential_matches[0]
+        shop_info['num_listings'] = num
+        logger.info(f"Found {num} listings using pattern: {pattern} (score: {score:.1f})")
+        if len(potential_matches) > 1:
+            logger.debug(f"Other candidates: {[(n, s) for n, s, _ in potential_matches[1:4]]}")
 
     # If still not found, try looking in HTML attributes and JSON
     if 'num_listings' not in shop_info or shop_info['num_listings'] == 0:
@@ -221,21 +236,35 @@ def extract_shop_info_improved(html: str, shop_name: str = None) -> Dict:
 
     # Last resort: scan all elements containing numbers and item/listing keywords
     if 'num_listings' not in shop_info or shop_info['num_listings'] == 0:
-        for elem in soup.find_all(['span', 'div', 'p', 'a', 'li']):
+        element_matches = []
+        for elem in soup.find_all(['span', 'div', 'p', 'a', 'li', 'h1', 'h2', 'h3']):
             text = elem.get_text(strip=True)
             # Look for patterns like "107" near "item" or "listing"
-            if len(text) < 100 and ('item' in text.lower() or 'listing' in text.lower()):
+            if len(text) < 200 and ('item' in text.lower() or 'listing' in text.lower()):
+                # Skip if it's about favorites, reviews, sold, etc.
+                if any(word in text.lower() for word in ['favorite', 'review', 'sold', 'cart', 'wishlist']):
+                    continue
+
                 numbers = re.findall(r'(\d+(?:,\d+)*)', text)
                 if numbers:
                     try:
                         num = int(numbers[0].replace(',', ''))
-                        # Sanity check: listings count should be reasonable (0-100000)
-                        if 0 < num < 100000:
-                            shop_info['num_listings'] = num
-                            logger.info(f"Found {num} listings in element text: {text[:50]}")
-                            break
+                        # Sanity check: listings count should be reasonable (1-100000)
+                        if 1 <= num < 100000:
+                            # Prefer larger numbers (more likely to be listing count)
+                            score = num
+                            element_matches.append((num, score, text[:80]))
                     except ValueError:
                         continue
+
+        # Choose the highest number found (most likely to be the listing count)
+        if element_matches:
+            element_matches.sort(key=lambda x: x[1], reverse=True)
+            num, score, text = element_matches[0]
+            shop_info['num_listings'] = num
+            logger.info(f"Found {num} listings in element text: {text}")
+            if len(element_matches) > 1:
+                logger.debug(f"Other element candidates: {[(n, t[:40]) for n, _, t in element_matches[1:3]]}")
 
     # Log if we couldn't find listings
     if 'num_listings' not in shop_info or shop_info['num_listings'] == 0:
