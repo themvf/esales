@@ -176,20 +176,72 @@ def extract_shop_info_improved(html: str, shop_name: str = None) -> Dict:
             except (ValueError, IndexError):
                 continue
 
-    # Look for items/listings count
+    # Look for items/listings count with more flexible patterns
     items_patterns = [
+        # Direct patterns
         r'(\d+(?:,\d+)*)\s+items?',
         r'(\d+(?:,\d+)*)\s+listings?',
+        # Reversed patterns (label first)
+        r'items?:\s*(\d+(?:,\d+)*)',
+        r'listings?:\s*(\d+(?:,\d+)*)',
+        # With possible whitespace/newlines
+        r'(\d+(?:,\d+)*)\s*\n?\s*items?',
+        r'(\d+(?:,\d+)*)\s*\n?\s*listings?',
+        # In parentheses or with other separators
+        r'\((\d+(?:,\d+)*)\s+items?\)',
+        r'\((\d+(?:,\d+)*)\s+listings?\)',
     ]
 
     for pattern in items_patterns:
         match = re.search(pattern, page_text, re.IGNORECASE)
         if match:
             try:
-                shop_info['num_listings'] = int(match.group(1).replace(',', ''))
+                num = int(match.group(1).replace(',', ''))
+                shop_info['num_listings'] = num
+                logger.info(f"Found {num} listings using pattern: {pattern}")
                 break
             except (ValueError, IndexError):
                 continue
+
+    # If still not found, try looking in HTML attributes and JSON
+    if 'num_listings' not in shop_info or shop_info['num_listings'] == 0:
+        # Look for JSON data in script tags
+        script_tags = soup.find_all('script', type='application/json')
+        for script in script_tags:
+            if script.string:
+                # Look for variations of listing/item counts in JSON
+                json_matches = re.findall(r'"(?:listing_count|item_count|total_listings|total_items|activeListingCount)"\s*:\s*(\d+)', script.string, re.IGNORECASE)
+                if json_matches:
+                    try:
+                        shop_info['num_listings'] = int(json_matches[0])
+                        logger.info(f"Found {json_matches[0]} listings in JSON data")
+                        break
+                    except ValueError:
+                        continue
+
+    # Last resort: scan all elements containing numbers and item/listing keywords
+    if 'num_listings' not in shop_info or shop_info['num_listings'] == 0:
+        for elem in soup.find_all(['span', 'div', 'p', 'a', 'li']):
+            text = elem.get_text(strip=True)
+            # Look for patterns like "107" near "item" or "listing"
+            if len(text) < 100 and ('item' in text.lower() or 'listing' in text.lower()):
+                numbers = re.findall(r'(\d+(?:,\d+)*)', text)
+                if numbers:
+                    try:
+                        num = int(numbers[0].replace(',', ''))
+                        # Sanity check: listings count should be reasonable (0-100000)
+                        if 0 < num < 100000:
+                            shop_info['num_listings'] = num
+                            logger.info(f"Found {num} listings in element text: {text[:50]}")
+                            break
+                    except ValueError:
+                        continue
+
+    # Log if we couldn't find listings
+    if 'num_listings' not in shop_info or shop_info['num_listings'] == 0:
+        logger.warning(f"Could not extract listing count for {shop_name}. Patterns may need updating.")
+        # Save a sample of the HTML for debugging
+        logger.debug(f"Sample HTML (first 1000 chars): {page_text[:1000]}")
 
     logger.debug(f"Extracted shop info: {shop_info}")
     return shop_info
