@@ -49,6 +49,7 @@ jobs:
         env:
           MAX_LISTINGS: ${{ github.event.inputs.max_listings || '50' }}
           SPECIFIC_SHOPS: ${{ github.event.inputs.shops || '' }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
         run: |
           echo "Starting re-scrape process..."
           echo "Max listings per shop: $MAX_LISTINGS"
