@@ -7,7 +7,7 @@ import logging
 from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .etsy_client import EtsyClient
+from .firecrawl_client import FirecrawlClient
 from .extractors import (
     extract_listing_ids,
     extract_shop_info,
@@ -29,7 +29,7 @@ class EtsyScraper:
             delay: Delay between requests in seconds
             max_workers: Maximum number of concurrent workers
         """
-        self.client = EtsyClient(delay=delay)
+        self.client = FirecrawlClient()
         self.max_workers = max_workers
         self.base_url = "https://www.etsy.com"
 

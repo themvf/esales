@@ -11,6 +11,11 @@ scraper:
   # Maximum retry attempts for failed requests
   max_retries: 3
 
+# Firecrawl settings
+firecrawl:
+  # API Key (optional, can be set via FIRECRAWL_API_KEY env var)
+  api_key: ""
+
 # Scheduling settings
 scheduling:
   # Hour to run daily scrape (24-hour format, 0-23)
